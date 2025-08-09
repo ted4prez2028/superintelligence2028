@@ -3,6 +3,8 @@ from dotenv import load_dotenv
 load_dotenv()
 from typing import Dict, Any
 from openai import OpenAI
+import json
+from . import self_awareness
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -26,8 +28,10 @@ async def run_evaluation(payload: Dict[str, Any]):
 
 async def run_self_model(payload: Dict[str, Any]):
     about = payload.get("about","the system")
-    out = await _chat(f"Self-assess capabilities, limits, and next steps regarding {about}.", "You perform introspective analysis.")
-    return {"self_model": out}
+    state = self_awareness.snapshot()
+    prompt = f"Self-assess capabilities, limits, and next steps regarding {about}.\nSystem state: {json.dumps(state)}"
+    out = await _chat(prompt, "You perform introspective analysis.")
+    return {"self_model": out, "state": state}
 
 async def run_policy_loops(payload: Dict[str, Any]):
     goals = payload.get("goals", [])
