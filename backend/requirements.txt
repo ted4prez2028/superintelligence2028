@@ -9,3 +9,4 @@ python-jose==3.3.0
 cryptography==43.0.1
 psutil==5.9.8
 numpy==1.26.4
+=======
