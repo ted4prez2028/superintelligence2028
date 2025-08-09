@@ -45,7 +45,7 @@ def all_vectors(limit: int = 200):
         rows = c.execute("SELECT id, text, embedding FROM vectors LIMIT ?", (limit,)).fetchall()
     out = []
     for rid, rtext, remb in rows:
-        v = json.loads(remb.decode('utf-8')).tolist()
+        v = json.loads(remb.decode('utf-8'))
         out.append({"id": rid, "text": rtext, "embedding": v})
     return {"items": out}
 
