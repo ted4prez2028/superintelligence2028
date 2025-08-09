@@ -1,5 +1,6 @@
 import os, sqlite3, math, json
 from typing import Dict, List
+import numpy as np
 from openai import OpenAI
 
 DB = os.path.join(os.path.dirname(__file__), "..", "memory.db")
@@ -9,10 +10,16 @@ def _conn():
     c.execute("CREATE TABLE IF NOT EXISTS vectors (id TEXT PRIMARY KEY, text TEXT, embedding BLOB)")
     return c
 
+_cache: Dict[str, List[float]] = {}
+
 def _embed(text: str) -> List[float]:
+    if text in _cache:
+        return _cache[text]
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     r = client.embeddings.create(model="text-embedding-3-small", input=text)
-    return r.data[0].embedding
+    emb = r.data[0].embedding
+    _cache[text] = emb
+    return emb
 
 def upsert(id: str, text: str) -> Dict:
     e = json.dumps(_embed(text)).encode('utf-8')
@@ -38,7 +45,18 @@ def all_vectors(limit: int = 200):
         rows = c.execute("SELECT id, text, embedding FROM vectors LIMIT ?", (limit,)).fetchall()
     out = []
     for rid, rtext, remb in rows:
-        import numpy as np
         v = json.loads(remb.decode('utf-8')).tolist()
         out.append({"id": rid, "text": rtext, "embedding": v})
     return {"items": out}
+
+
+def retrieve_context(ids: List[str]) -> str:
+    if not ids:
+        return ""
+    placeholders = ",".join(["?" for _ in ids])
+    with _conn() as c:
+        rows = c.execute(
+            f"SELECT text FROM vectors WHERE id IN ({placeholders})",
+            ids,
+        ).fetchall()
+    return "\n".join(r[0] for r in rows)
