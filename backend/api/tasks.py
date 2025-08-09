@@ -5,14 +5,18 @@ _q = asyncio.Queue()
 async def worker():
     while True:
         tid = await _q.get()
-        task = _tasks.get(tid); 
-        if not task: continue
+        task = _tasks.get(tid)
+        if not task:
+            _q.task_done()
+            continue
         fn, payload = task["fn"], task["payload"]
         try:
             res = await fn(payload)
             task.update(status="done", result=res)
         except Exception as e:
             task.update(status="error", error=str(e))
+        finally:
+            _q.task_done()
 
 async def start_workers(n=1):
     for _ in range(n): asyncio.create_task(worker())
