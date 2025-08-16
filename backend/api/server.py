@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 from .auth import verify_request
 from .rate_limit import allow
-from . import runners, tasks, memory
+from . import runners, tasks, memory, reasoning, autonomy, self_awareness, self_improve, safety
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -18,15 +18,22 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, 
 @app.on_event("startup")
 async def boot():
     await tasks.start_workers(1)
+    tasks.submit(self_improve.refine_prompts, {})
 
 @app.get("/health")
 async def health(): return {"ok": True}
+
+@app.get("/system/state")
+async def system_state():
+    return self_awareness.snapshot()
 
 @app.post("/chat")
 async def chat(data: Dict[str, Any], request: Request, _auth=Depends(verify_request)):
     allow(request, 5)
     msg = data.get("message") or "Hello"
     sys = data.get("system","You are helpful.")
+    await safety.check_text(msg)
+    safety.audit(request, "chat")
     out = await runners._chat(msg, sys)
     return {"message": out}
 
@@ -35,6 +42,8 @@ async def chat_stream(data: Dict[str, Any], request: Request, _auth=Depends(veri
     allow(request, 5)
     msg = data.get("message") or "Hello"
     sys = data.get("system","You are helpful.")
+    await safety.check_text(msg)
+    safety.audit(request, "chat_stream")
 
     async def gen():
         text = await runners._chat(msg, sys)
@@ -50,6 +59,7 @@ async def ws_chat(ws: WebSocket):
         while True:
             data = await ws.receive_json()
             msg = data.get("message","Hello")
+            await safety.check_text(msg)
             text = await runners._chat(msg, "You are helpful.")
             for i in range(0, len(text), 50):
                 await ws.send_json({"delta": text[i:i+50]})
@@ -59,19 +69,45 @@ async def ws_chat(ws: WebSocket):
 
 @app.post("/runners/planning")
 async def planning(data: Dict[str, Any], request: Request, _auth=Depends(verify_request)):
-    allow(request, 10); return await runners.run_planning(data)
+    allow(request, 10)
+    await safety.check_text(json.dumps(data))
+    safety.audit(request, "runners_planning")
+    return await runners.run_planning(data)
 
 @app.post("/runners/evaluation")
 async def evaluation(data: Dict[str, Any], request: Request, _auth=Depends(verify_request)):
-    allow(request, 10); return await runners.run_evaluation(data)
+    allow(request, 10)
+    await safety.check_text(json.dumps(data))
+    safety.audit(request, "runners_evaluation")
+    return await runners.run_evaluation(data)
 
 @app.post("/runners/self-model")
 async def self_model(data: Dict[str, Any], request: Request, _auth=Depends(verify_request)):
-    allow(request, 10); return await runners.run_self_model(data)
+    allow(request, 10)
+    await safety.check_text(json.dumps(data))
+    safety.audit(request, "runners_self_model")
+    return await runners.run_self_model(data)
 
 @app.post("/runners/policy-loops")
 async def policy_loops(data: Dict[str, Any], request: Request, _auth=Depends(verify_request)):
-    allow(request, 10); return await runners.run_policy_loops(data)
+    allow(request, 10)
+    await safety.check_text(json.dumps(data))
+    safety.audit(request, "runners_policy_loops")
+    return await runners.run_policy_loops(data)
+
+@app.post("/runners/reasoning")
+async def reasoning_endpoint(data: Dict[str, Any], request: Request, _auth=Depends(verify_request)):
+    allow(request, 10)
+    await safety.check_text(json.dumps(data))
+    safety.audit(request, "runners_reasoning")
+    return await reasoning.run_reasoning(data)
+
+@app.post("/runners/autonomy")
+async def autonomy_endpoint(data: Dict[str, Any], request: Request, _auth=Depends(verify_request)):
+    allow(request, 10)
+    await safety.check_text(json.dumps(data))
+    safety.audit(request, "runners_autonomy")
+    return await autonomy.run_autonomy(data)
 
 @app.post("/tasks/submit")
 async def submit_task(data: Dict[str, Any], request: Request, _auth=Depends(verify_request)):
